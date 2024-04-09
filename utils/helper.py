@@ -2,6 +2,7 @@ import torch
 from matplotlib import pyplot as plt
 import numpy as np
 from PIL import Image
+from torch.utils.data import Dataset
 
 def set_random_seed(s:int=137):
     torch.manual_seed(s) 
@@ -9,7 +10,7 @@ def set_random_seed(s:int=137):
         torch.cuda.manual_seed(s)
         torch.cuda.manual_seed_all(s)
 
-def set_device():
+def get_device():
     if torch.cuda.is_available():
         device = torch.device("cuda") 
     else:
@@ -65,3 +66,36 @@ class AugumentationTrans(object):
 
     def __call__(self, x):
         return [self._transforms(x) for i in range(self.n_views)]
+
+class WrappedDataset(Dataset):
+    '''
+    This class is designed to apply diffent transforms to subdatasets
+    subdatasets are not allowed to have different transforms by default
+    By wrapping subdatasets to WrappedDataset, this problem is solved
+    e.g 
+    _train_set, _val_set = torch.utils.data.random_split(dataset, [0.8, 0.2])
+    train_set = WrappedDataset(_train_set,transforms.RandomHorizontalFlip(), n_views=3)
+    val_set = WrappedDataset(_val_set,transforms.ToTensor())
+    '''
+    def __init__(self, dataset, transform=None, n_views = 1):
+        self.dataset = dataset
+        self.transform = transform
+        self.n_views = n_views
+        
+    def __getitem__(self, index):
+        x, y = self.dataset[index]
+        if self.transform:
+            x = [self.transform(x) for i in range(self.n_views)]
+            y = [y for i in range(self.n_views)]
+        return x, y
+        
+    def __len__(self):
+        return len(self.dataset)
+
+#####################################
+# For CIFAR10 dataset
+#####################################   
+def get_cifar10_classes():
+    labels = ["airplane","automobile","bird","cat",
+              "deer","dog","frog","horse","ship","truck"]
+    return labels
