@@ -3,7 +3,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset
-
+from torchvision import datasets
+import time
 def set_random_seed(s:int=137):
     torch.manual_seed(s) 
     if torch.cuda.is_available():
@@ -14,7 +15,7 @@ def get_device():
     if torch.cuda.is_available():
         device = torch.device("cuda") 
     else:
-        device torch.device("cpu")
+        device = torch.device("cpu")
     return device
 
 def show_images(imgs,nrow,ncol,titles = None):
@@ -30,7 +31,7 @@ def show_images(imgs,nrow,ncol,titles = None):
     fig and axes
     '''
     fig,axes = plt.subplots(nrow,ncol)
-    for i in range(len(imgs)):
+    for i in range(min(nrow*ncol,len(imgs))):
         row  = i // ncol
         col = i % ncol
         if titles:
@@ -46,16 +47,17 @@ def show_images(imgs,nrow,ncol,titles = None):
             raise TypeError("each image must be an PIL or torch.tensor or numpy.ndarray")
         axes[row,col].imshow(img)
         axes[row,col].set_axis_off()
+        fig.tight_layout()
     return fig,axes
 
 #####################################
 # image augumentation
 #####################################
-class AugumentationTrans(object):
+class AugmentationTrans(object):
     '''
     for image augumentation
     '''
-    def __init__(self, my_transforms, n_views=2):
+    def __init__(self, my_transforms, n_views=1):
         '''
         --args:
         my_transforms: torchvison.transforms object that transforms the image
@@ -99,3 +101,29 @@ def get_cifar10_classes():
     labels = ["airplane","automobile","bird","cat",
               "deer","dog","frog","horse","ship","truck"]
     return labels
+
+def download_dataset(dataset_path,dataset_name):
+    if dataset_name == "CIFAR10":
+        '''
+        train_dataset contains 50000 images of size 32*32*3 
+        '''
+        train_dataset = datasets.CIFAR10(root=dataset_path, train=True,download=True)
+        test_dataset = datasets.CIFAR10(root=dataset_path, train=False,download=True)
+        data_mean = (train_dataset.data / 255.0).mean(axis=(0,1,2))
+        data_std = (train_dataset.data / 255.0).std(axis=(0,1,2))
+        return train_dataset,test_dataset,data_mean,data_std
+    else:
+        raise NotImplementedError("downloading for this dataset is not implemented")
+
+#####################################
+# For Benchmarking
+#####################################   
+class Timer:
+    def __init__(self,process_name = "Process A"):
+        self._process_name = process_name
+    def __enter__(self):
+        self.start_time = time.time()
+    def __exit__(self, *args):
+        self.end_time = time.time()
+        time_diff = self.end_time - self.start_time
+        print(f"{self._process_name} took {time_diff} sec")

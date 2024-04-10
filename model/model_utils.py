@@ -1,8 +1,4 @@
-import sys
 import os
-import utils.helper
-sys.path.append('../utils')
-from utils import helper
 import torch
 import json
 import torchvision
@@ -93,7 +89,7 @@ def train_model(net,optimizer,loss_fn,train_loader,test_loader,val_loader=None,
                 labels = torch.cat(labels,dim=0)
                 imgs,labels = imgs.to(device),labels.to(device)
                 preds = net(imgs)
-                loss = loss_fn(preds,labels,n_views)
+                loss = loss_fn(preds,labels)
             else:
                 imgs,labels = imgs.to(device),labels.to(device)
                 preds = net(imgs)
@@ -118,7 +114,7 @@ def train_model(net,optimizer,loss_fn,train_loader,test_loader,val_loader=None,
     # test the model
     test_acc = test_model(net,test_loader,device)
     # return the accuracies
-    acc_data = {"training_accs":train_accs,
+    acc_data = {"training_accs":[t.item() for t in train_accs],
                 "val_accs":val_accs,
                 "test_acc":test_acc}
     return acc_data
