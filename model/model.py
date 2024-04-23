@@ -18,7 +18,7 @@ class BaseNetwork(torch.nn.modules):
 
     def save_model(self,dir_path,overwrite = True):
         model_path = os.path.join(dir_path,"model.tar")
-        config_path = os.path.join(dir_path,"config.json")
+        config_path = os.path.join(dir_path,"model_config.json")
         if os.path.exists(model_path) and os.path.exists(config_path) and (not overwrite):
             print("File exists and overwrite = False, no IO is performed \n")
         else:
@@ -33,7 +33,7 @@ class BaseNetwork(torch.nn.modules):
     
     def load_model(self,dir_path):
         model_path = os.path.join(dir_path,"model.tar")
-        config_path = os.path.join(dir_path,"config.json")
+        config_path = os.path.join(dir_path,"model_config.json")
         if not os.path.exists(model_path):
             raise FileNotFoundError("Model file:{} does not exist".format(model_path)) 
         if not os.path.exists(config_path):
