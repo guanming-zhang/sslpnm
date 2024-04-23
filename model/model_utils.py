@@ -50,7 +50,8 @@ def load_model(dir_path):
     net.load_state_dict(torch.load(model_path))
     return net
 
-  
+
+
 
 def train_model(net,optimizer,loss_fn,train_loader,test_loader,val_loader=None,
                 n_epoch=100, n_converge = 10,device = torch.device("cpu")):
@@ -133,3 +134,15 @@ def test_model(net,data_loader,device):
             count += labels.shape[0]
     test_acc = true_preds / count
     return test_acc
+
+class model_trainer:
+    def __init__(self,net,optimizer,loss,train_loader,test_loader,device = torch.device("cpu")):
+        self.net = net 
+        self.optimizer = optimizer
+        self.loss = loss
+        self.train_loader = train_loader
+        self.train_loader = self.train_loader
+        self.device = device
+
+    def train_model()
+    
