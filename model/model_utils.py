@@ -153,8 +153,20 @@ class model_trainer:
         self.n_rec_loss = n_rec_loss
         self.n_rec_weight = n_rec_weight
         self.n_rec_grad = n_rec_grad
+        # To save the status of the training
+        self.current_epoch = 0
+        self.training_accuracy = []
+        self.validation_accuracy = []
+        self.training_loss = []
+        self.validation_loss = []
+        self.test_accuracy = -1.0
+        self.test_loss = -1.0
         
         
+    def continue_training(self,dir_path,n_epoch=100, n_converge = 10,device = torch.device("cpu")):
+        config = self.net.load_model(dir_path)
+        self.current_epoch = config["last_epoch"] + 1
+        return self.train_model(n_epoch,n_converge,device)
 
     def train_model(self,n_epoch=100, n_converge = 10,device = torch.device("cpu")):
         '''
@@ -178,7 +190,6 @@ class model_trainer:
         device: device 
         '''
         self.net.to(device)
-        train_accs, val_accs = [], []
         best_epoch,best_val_acc = -1,-1.0
         # train the model
         for epoch in range(n_epoch):
@@ -201,22 +212,30 @@ class model_trainer:
                 self.optimizer.step()
                 n_true += (torch.argmax(preds,dim=1) == labels).sum()
                 n_sample += labels.size()[0]
-            train_acc = n_true/n_sample
-            train_accs.append(train_acc)
+            # save the training accuracy and loss
+            training_acc = (n_true/n_sample).item()
+            self.training_loss.append(loss.item())
+
             print("epoch={},training accuracy is {:.3f}\n".format(epoch,train_acc))
             # model validation
             if self.val_loader:
-                val_acc = test_model(self.net,self.val_loader)
-                val_accs.append(val_acc)
-                if val_acc > best_val_acc:
-                    best_val_acc = val_acc
+                validation_acc = test_model(self.net,self.val_loader)
+                if validation_acc > best_val_acc:
+                    best_val_acc = validation_acc
                     best_epoch = epoch
                 elif epoch - best_epoch > n_converge:
                     print("Early stopping at epoch = {} \n".format(epoch))
                     break
             # record the loss and accuracy
             if epoch % self.n_rec_loss == 0:
+                self.writer.add_scalar("training_accuracy",training_acc,self.current_epoch)
+                self.writer.add_scalar("training_loss",loss,self.current_epoch)
+                self.writer.add_scalar("validation_acc",validation_acc,self.current_epoch) 
+                self.training_accuracy.append(training_acc)     
+                self.training_loss.append(loss.item())
+                self.validation_accuracy.append(validation_acc)
                 
+
         # test the model
         test_acc = test_model(self.net,self.test_loader)
         # return the accuracies

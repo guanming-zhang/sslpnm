@@ -14,9 +14,9 @@ class BaseNetwork(torch.nn.modules):
         super().__init__()
         self.model_name = type(self).__name__         
         self.net = None
-        self.hyper_parameters = {}
+        self.hyper_parameters = None
 
-    def save_model(self,dir_path,overwrite = True):
+    def save_model(self,dir_path,epoch=0,overwrite = True):
         model_path = os.path.join(dir_path,"model.tar")
         config_path = os.path.join(dir_path,"model_config.json")
         if os.path.exists(model_path) and os.path.exists(config_path) and (not overwrite):
@@ -26,12 +26,13 @@ class BaseNetwork(torch.nn.modules):
                 os.makedirs(dir_path,exist_ok=True)
             config = {}
             config["model_name"] = self.model_name
-            config.update(self.hyper_parameters)
+            config["last_epoch"] = epoch
+            config["hyper_parameters"] = self.hyper_parameters
             torch.save(self.state_dict(), model_path)
             with open(config_path,"w") as f:
                 f.write(json.dumps(config,indent=4))
     
-    def load_model(self,dir_path):
+    def load_model(self,dir_path,epoch=None):
         model_path = os.path.join(dir_path,"model.tar")
         config_path = os.path.join(dir_path,"model_config.json")
         if not os.path.exists(model_path):
@@ -43,16 +44,20 @@ class BaseNetwork(torch.nn.modules):
         if config["model_name"] != self.model_name:
             raise TypeError("cannot load {} into {} object".format(config["model_name"],self.model_name))
         # update hyper_peremeters 
-        if self.hyper_parameters:
-            for k,v in self.hyper_parameters:
+        if config["hyper_parameters"]:
+            for k,v in config["hyper_parameters"]:
                 setattr(self,k,v)
         self.net.load_state_dict(torch.load(model_path))
+        return config
 
 class Resnet34(BaseNetwork):
     def __init__(self,num_classes:int):
         super.__init__()
         self.model_name = "Resnet34_num_class" + str(num_classes)
-        self.hyper_parameters = {}
+        # this is a sloppy way of recording hyperperameters
+        self.hyper_parameters = {"num_classes":num_classes}
+        for k,v in self.hyper_parameters:
+            setattr(self,k,v)
         # construct the model
         self.net = torchvision.models.resnet34(num_classes = num_classes)
     
