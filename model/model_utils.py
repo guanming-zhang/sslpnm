@@ -2,55 +2,36 @@ import os
 import torch
 import json
 import torchvision  
+import numpy as np
+from torch import optim
 from torch.utils.tensorboard import SummaryWriter
+import sys
+sys.path.append("../model")
+from model import models
 
 
-def save_model(model,config,dir_path,overwrite = True):
-    '''
-    --args
-    model: the torch nerual network to be saved
-    config: the dict object contains all the information about the model
-            e.g model_name, num_classes
-    dir_path: the path where the model and the config file are saved 
-    overwrite: if True, overwrite the existed model
-    '''
-    model_path = os.path.join(dir_path,"model.tar")
-    config_path = os.path.join(dir_path,"config.json")
-    if os.path.exists(model_path) and os.path.exists(config_path) and (not overwrite):
-        print("File exists and overwrite = False, no IO is performed \n")
-    else:
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path,exist_ok=True)
-        torch.save(model.state_dict(), model_path)
-        with open(config_path,"w") as f:
-            f.write(json.dumps(config,indent=4))
+def create_optim_by_name(params,optim_name:str,optim_hyper_params:dict,scheduler_name:str="",scheduler_hyper_params:dict={}):
+    optimizer_config, scheduler_config = {},{}
+    if optim_name == "SGD":
+        optimizer = optim.SGD(params=params,**optim_hyper_params)
+        optimizer_config["optimizer_name"] = "SGD"
+        optimizer_config["hyper_parameters"] = optim_hyper_params
+    elif optim_name == "AdamW":
+        optimizer = optim.AdamW(params=params,**optim_hyper_params)
+        optimizer_config["optimizer_name"] = "AdamW"
+        optimizer_config["hyper_parameters"] = optim_hyper_params
     
-
-def load_model(dir_path):
-    model_path = os.path.join(dir_path,"model.tar")
-    config_path = os.path.join(dir_path,"config.json")
-    if not os.path.exists(model_path):
-        raise FileNotFoundError("Model file:{} does not exist".format(model_path)) 
-    if not os.path.exists(config_path):
-        raise FileNotFoundError("Config file:{} does not exist".format(config_path))
-    with open(config_path,"r") as f:
-        config = json.loads(f.read())
-    
-    if config["model_name"] == "resnet18":
-        net = torchvision.models.resnet18(num_classes=config["num_classes"])
-    elif config["model_name"] == "resnet34":
-        net = torchvision.models.resnet34(num_classes=config["num_classes"])
-    elif config["model_name"] == "resnet50":
-        net = torchvision.models.resnet50(num_classes=config["num_classes"])
-    elif config["model_name"] == "resnet101":
-        net = torchvision.models.resnet101(num_classes=config["num_classes"])
-    elif config["model_name"] == "resnet152":
-        net = torchvision.models.resnet152(num_classes=config["num_classes"])
+    if scheduler_name == "MultiStepLR":
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer=optimizer,**scheduler_hyper_params)
+        scheduler_config["scheduler_name"] = "MultiStepLR" 
     else:
-        raise NotImplementedError("Model:{} is not implemented".format(config["model_name"])) 
-    net.load_state_dict(torch.load(model_path))
-    return net
-
+        scheduler = None  
+    setattr(optimizer,"config",optimizer_config)
+    if scheduler:
+        setattr(scheduler,"config",scheduler)
+    return optimizer,scheduler
+    
+    
 
 
 
@@ -137,22 +118,22 @@ def test_model(net,data_loader,device):
     return test_acc
 
 class model_trainer:
-    def __init__(self,net = None,optimizer = None,loss = None,
+    def __init__(self,net = None,optimizer = None,scheduler = None,loss = None,
                 train_loader = None,test_loader = None,val_loader = None,
-                logdir = "./runs",n_rec_loss = 1,n_rec_weight = 1, n_rec_grad = 1,
+                logdir = "./runs",n_rec_loss = 1,n_rec_weight = 20,
                 device = torch.device("cpu")):
         self.net = net 
         self.optimizer = optimizer
+        self.scheduler = scheduler
         self.loss = loss
         self.test_loader = test_loader
         self.val_loader = val_loader
         self.train_loader = train_loader
         self.device = device
         # for tensorboard
-        self.writer = SummaryWriter()
+        self.writer = SummaryWriter(log_dir=logdir)
         self.n_rec_loss = n_rec_loss
         self.n_rec_weight = n_rec_weight
-        self.n_rec_grad = n_rec_grad
         # To save the status of the training
         self.current_epoch = 0
         self.training_accuracy = []
@@ -161,6 +142,7 @@ class model_trainer:
         self.validation_loss = []
         self.test_accuracy = -1.0
         self.test_loss = -1.0
+        self.top5_arruracy = -1.0
         
         
     def continue_training(self,dir_path,n_epoch=100, n_converge = 10,device = torch.device("cpu")):
@@ -193,8 +175,12 @@ class model_trainer:
         best_epoch,best_val_acc = -1,-1.0
         # train the model
         for epoch in range(n_epoch):
+            self.current_epoch += 1
+            epoch_loss = 0.0
+            n_iter = 0
             n_true,n_sample = 0,0
             for imgs,labels in self.train_loader:
+                n_iter += 1
                 self.net.train()
                 self.optimizer.zero_grad()
                 if isinstance(imgs,list): # for augumented data
@@ -212,37 +198,45 @@ class model_trainer:
                 self.optimizer.step()
                 n_true += (torch.argmax(preds,dim=1) == labels).sum()
                 n_sample += labels.size()[0]
+                epoch_loss += loss.item()
+            if self.scheduler:
+                self.scheduler.step()
+            epoch_loss /= n_iter
             # save the training accuracy and loss
             training_acc = (n_true/n_sample).item()
-            self.training_loss.append(loss.item())
-
-            print("epoch={},training accuracy is {:.3f}\n".format(epoch,train_acc))
+            print("epoch={},training accuracy is {:.3f}\n".format(self.current_epoch,training_acc))
             # model validation
             if self.val_loader:
-                validation_acc = test_model(self.net,self.val_loader)
-                if validation_acc > best_val_acc:
-                    best_val_acc = validation_acc
+                val_loss,val_acc = self.test(self.val_loader)
+                if val_acc > best_val_acc:
+                    best_val_acc = val_acc
                     best_epoch = epoch
                 elif epoch - best_epoch > n_converge:
-                    print("Early stopping at epoch = {} \n".format(epoch))
+                    print("Early stopping at epoch = {} \n".format(self.current_epoch))
                     break
             # record the loss and accuracy
             if epoch % self.n_rec_loss == 0:
                 self.writer.add_scalar("training_accuracy",training_acc,self.current_epoch)
                 self.writer.add_scalar("training_loss",loss,self.current_epoch)
-                self.writer.add_scalar("validation_acc",validation_acc,self.current_epoch) 
+                self.writer.add_scalar("validation_acc",val_acc,self.current_epoch) 
                 self.training_accuracy.append(training_acc)     
-                self.training_loss.append(loss.item())
-                self.validation_accuracy.append(validation_acc)
-                
-
-        # test the model
-        test_acc = test_model(self.net,self.test_loader)
-        # return the accuracies
-        acc_data = {"training_accs":[t.item() for t in train_accs],
-                    "val_accs":val_accs,
-                    "test_acc":test_acc}
-        return acc_data
+                self.training_loss.append(epoch_loss)
+                self.validation_accuracy.append(val_acc)
+                self.validation_loss.append(val_loss)
+            
+            count = 0 
+            if epoch % self.n_rec_weight == 0:
+                self.net.eval()
+                for name,parameter in self.net.named_parameters():
+                    if count >= 16:
+                        break #only record the first 16 layers
+                    if 'weight' in name:
+                        self.writer.add_histogram('weight:' + name,parameter.data.view(-1),self.current_epoch)
+                        self.writer.add_histogram('grad:' + name, parameter.data.grad.view(-1),self.current_epoch)
+                    count += 1
+        self.test_loss,self.test_acc = self.test(self.test_loader)
+        self.top5_acc = self.n_accuracy(self.test_loader,(5,))
+        return self._mertic2dict()
     
     def test(self,data_loader):
         '''
@@ -250,14 +244,109 @@ class model_trainer:
         '''
         self.net.eval()
         true_preds, count = 0, 0
+        test_loss, n_iter = 0.0, 0
         for imgs,labels in data_loader:
-            imgs, labels = imgs[0].to(self.device), labels[0].to(self.device)
+            if isinstance(imgs,list): # for augumented data
+                    n_views = len(imgs)
+                    imgs = torch.cat(imgs,dim=0)
+                    labels = torch.cat(labels,dim=0)
+                    imgs,labels = imgs.to(self.device),labels.to(self.device)
             with torch.no_grad():
                 preds = self.net(imgs).argmax(dim=-1)
                 true_preds += (preds == labels).sum().item()
                 count += labels.shape[0]
+                test_loss += self.loss(preds,labels).item()
+                n_iter += 1 
+        test_loss /= n_iter
         test_acc = true_preds / count
-        return test_acc
+        return test_loss,test_acc
     
+    def n_accuracy(self,data_loader, top_k=(5,10)):
+        '''
+        get the top k accuracy for the net with the data set
+        see https://github.com/bearpaw/pytorch-classification/blob/24f1c456f48c78133088c4eefd182ca9e6199b03/utils/eval.py#L5
+        '''
+        self.net.eval()
+        acc = [0.0 for _ in top_k] 
+        n_iter = 0
+        max_k = max(top_k)
+        for imgs,labels in data_loader:
+            if isinstance(imgs,list): # for augumented data
+                n_views = len(imgs)
+                imgs = torch.cat(imgs,dim=0)
+                labels = torch.cat(labels,dim=0)
+                imgs,labels = imgs.to(self.device),labels.to(self.device)
+            with torch.no_grad():
+                preds_k = self.net(imgs).topk(max_k,dim = 1) # size = (batch_size*n_view,top_k)
+                expanded_labels = labels.view(-1,1).expand_as(preds_k) # size = (batch_size*n_view,top_k)
+                for i in len(top_k):
+                    k = top_k[i]
+                    acc[i] += (preds_k == expanded_labels[:,:k]).float().sum(dim=1).mean()
+            n_iter += 1
+        acc = [val/n_iter for val in acc]
+        return acc
+    
+    def training_state_dict(self):
+        info_dict = {"training_accuracy":self.training_accuracy,
+                    "training_loss":self.training_loss,
+                    "validation_accuracy":self.validation_accuracy,
+                    "validation_loss":self.validation_loss,
+                    "test_loss":self.test_loss,
+                    "test_accuracy":self.test_acc,
+                    "top5_accuracy":self.top5_acc,
+                    "epoch":self.current_epoch}
+        return info_dict
+    
+    def load_optimizer(self,dir_path):
+        optim_path = os.path.join(dir_path,"optimizer.tar")
+        optim_config_path = os.path.join(dir_path,"optimizer_config.json")
+        sched_path = os.path.join(dir_path,"scheduler.tar")
+        sched_config_path = os.path.join(dir_path,"scheduler_config.json")
+        with open(optim_config_path,"r") as f:
+            optim_config = json.loads(f.read())
+        with open(sched_config_path,"r") as f:
+            sched_config = json.loads(f.read())
+        optim_name = optim_config["optimizer_name"]
+        scheduler_name = sched_config["scheduler_name"]
+        optimizer,scheduler = create_optim_by_name(params = self.net.parameters(),
+                                                   optim_name=optim_name,optim_hyper_params=optim_config["hyper_parameters"],
+                                                   scheduler_name=scheduler_name,scheduler_hyper_params=sched_config["hyper_parameters"])
+        optim_state_dict = torch.load(optim_path)
+        sched_state_dict = torch.load(sched_path)
+        optimizer.load_state_dict(optim_state_dict)
+        if scheduler:
+            scheduler.load_state_dict(sched_state_dict)
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+    
+    def save_optimizer(self,dir_path):
+        optim_path = os.path.join(dir_path,"optimizer.tar")
+        optim_config_path = os.path.join(dir_path,"optimizer_config.json")
+        sched_path = os.path.join(dir_path,"scheduler.tar")
+        sched_config_path = os.path.join(dir_path,"scheduler_config.json")
+        torch.save(self.optimizer.state_dict(),optim_path)
+        with open(optim_config_path,"w") as f:
+            f.write(json.dumps(self.optimizer.config, indent=4))
+        if self.scheduler:
+            torch.save(self.scheduler.state_dict(),sched_path)
+            with open(sched_path,"w") as f:
+                f.write(json.dumps(self.scheduler.config,indent=4))
+        else: # no scheduler is used
+            config = {"scheduler_name":"NA"}
+            with open(sched_config_path,"w") as f:
+                f.write(json.dumps(config,indent=4))
+    
+    def save_training(self,dir_path):
+        #save the model
+        self.net.save(dir_path)
+        #save the optimizer and scheduler
+        self.save_optimizer(dir_path)
+        #save the training information
+        with open(dir_path,"w") as f:
+            f.write(json.dumps(self.training_state_dict(),indent=4))
+    
+    def load_training(self,dir_path):
+        
+         
 
     
