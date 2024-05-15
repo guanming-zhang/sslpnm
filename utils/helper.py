@@ -78,6 +78,13 @@ class WrappedDataset(Dataset):
     _train_set, _val_set = torch.utils.data.random_split(dataset, [0.8, 0.2])
     train_set = WrappedDataset(_train_set,transforms.RandomHorizontalFlip(), n_views=3)
     val_set = WrappedDataset(_val_set,transforms.ToTensor())
+    train_loader = data.DataLoader(train_dataset,batch_size = batch_size,shuffle=True)
+
+    Additional comments: after the data augmentation, one batch 
+    data,label = next(iter(train_loader))
+    data is a 2D-list of images(size = n_veiws*batch_size*(C*W*H) )
+    label is is a 2D list of integers(size = n_views*batch_size*1)
+    The label of image data[i_view][j_img] is label[i_view][j_img]
     '''
     def __init__(self, dataset, transform=None, n_views = 1):
         self.dataset = dataset

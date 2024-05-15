@@ -63,6 +63,20 @@ class Resnet34(BaseNetwork):
     def forward(self,x):
         return self.net(x)
 
+class Resnet18(BaseNetwork):
+    def __init__(self,num_classes:int):
+        super().__init__()
+        self.model_name = "Resnet18"
+        # this is a sloppy way of recording hyperperameters
+        self.hyper_parameters = {"num_classes":num_classes}
+        for k,v in self.hyper_parameters.items():
+            setattr(self,k,v)
+        # construct the model
+        self.net = torchvision.models.resnet18(num_classes = num_classes)
+    
+    def forward(self,x):
+        return self.net(x)
+
 
 
 

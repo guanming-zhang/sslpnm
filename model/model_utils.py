@@ -255,7 +255,7 @@ class model_trainer:
                 preds = self.net(imgs).argmax(dim=-1)
                 true_preds += (preds == labels).sum().item()
                 count += labels.shape[0]
-                test_loss += self.loss(preds,labels).item()
+                test_loss += self.loss(preds,labels)
                 n_iter += 1 
         test_loss /= n_iter
         test_acc = true_preds / count
