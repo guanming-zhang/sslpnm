@@ -145,12 +145,12 @@ class model_trainer:
         self.top5_arruracy = -1.0
         
         
-    def continue_training(self,dir_path,n_epoch=100, n_converge = 10,device = torch.device("cpu")):
-        config = self.net.load_model(dir_path)
-        self.current_epoch = config["last_epoch"] + 1
-        return self.train_model(n_epoch,n_converge,device)
+    def continue_training(self,dir_path,n_epoch=100, n_converge = 10):
+        self.load_training(dir_path)
+        self.current_epoch += 1
+        return self.train_model(n_epoch,n_converge)
 
-    def train_model(self,n_epoch=100, n_converge = 10,device = torch.device("cpu")):
+    def train_model(self,n_epoch=100, n_converge = 10):
         '''
         net: deep neural network
         optimizer: torch optimizer
@@ -171,7 +171,7 @@ class model_trainer:
         n_converge: if the validation error does not improve for n_converge steps, then stop the trainning process
         device: device 
         '''
-        self.net.to(device)
+        self.net.to(self.device)
         best_epoch,best_val_acc = -1,-1.0
         # train the model
         for epoch in range(n_epoch):
@@ -187,11 +187,11 @@ class model_trainer:
                     n_views = len(imgs)
                     imgs = torch.cat(imgs,dim=0)
                     labels = torch.cat(labels,dim=0)
-                    imgs,labels = imgs.to(device),labels.to(device)
+                    imgs,labels = imgs.to(self.device),labels.to(self.device)
                     preds = self.net(imgs)
                     loss = self.loss(preds,labels)
                 else:
-                    imgs,labels = imgs.to(device),labels.to(device)
+                    imgs,labels = imgs.to(self.device),labels.to(self.device)
                     preds = self.net(imgs)
                     loss = self.loss(preds,labels)
                 loss.backward()
@@ -234,8 +234,8 @@ class model_trainer:
                         self.writer.add_histogram('weight:' + name,parameter.data.view(-1),self.current_epoch)
                         self.writer.add_histogram('grad:' + name, parameter.data.grad.view(-1),self.current_epoch)
                     count += 1
-        self.test_loss,self.test_acc = self.test(self.test_loader)
-        self.top5_acc = self.n_accuracy(self.test_loader,(5,))
+        self.test_loss,self.test_accuracy = self.test(self.test_loader)
+        self.top5_accuracy = self.n_accuracy(self.test_loader,(5,))
         return self._mertic2dict()
     
     def test(self,data_loader):
@@ -247,10 +247,10 @@ class model_trainer:
         test_loss, n_iter = 0.0, 0
         for imgs,labels in data_loader:
             if isinstance(imgs,list): # for augumented data
-                    n_views = len(imgs)
-                    imgs = torch.cat(imgs,dim=0)
-                    labels = torch.cat(labels,dim=0)
-                    imgs,labels = imgs.to(self.device),labels.to(self.device)
+                n_views = len(imgs)
+                imgs,labels = imgs[0].to(self.device),labels[0].to(self.device) 
+            else:
+                imgs,labels = imgs.to(self.device),labels.to(self.device) 
             with torch.no_grad():
                 preds = self.net(imgs).argmax(dim=-1)
                 true_preds += (preds == labels).sum().item()
@@ -275,7 +275,7 @@ class model_trainer:
                 n_views = len(imgs)
                 imgs = torch.cat(imgs,dim=0)
                 labels = torch.cat(labels,dim=0)
-                imgs,labels = imgs.to(self.device),labels.to(self.device)
+            imgs,labels = imgs.to(self.device),labels.to(self.device)
             with torch.no_grad():
                 preds_k = self.net(imgs).topk(max_k,dim = 1) # size = (batch_size*n_view,top_k)
                 expanded_labels = labels.view(-1,1).expand_as(preds_k) # size = (batch_size*n_view,top_k)
@@ -292,8 +292,8 @@ class model_trainer:
                     "validation_accuracy":self.validation_accuracy,
                     "validation_loss":self.validation_loss,
                     "test_loss":self.test_loss,
-                    "test_accuracy":self.test_acc,
-                    "top5_accuracy":self.top5_acc,
+                    "test_accuracy":self.test_accuracy,
+                    "top5_accuracy":self.top5_accuracy,
                     "epoch":self.current_epoch}
         return info_dict
     
@@ -312,9 +312,9 @@ class model_trainer:
                                                    optim_name=optim_name,optim_hyper_params=optim_config["hyper_parameters"],
                                                    scheduler_name=scheduler_name,scheduler_hyper_params=sched_config["hyper_parameters"])
         optim_state_dict = torch.load(optim_path)
-        sched_state_dict = torch.load(sched_path)
         optimizer.load_state_dict(optim_state_dict)
         if scheduler:
+            sched_state_dict = torch.load(sched_path)
             scheduler.load_state_dict(sched_state_dict)
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -332,7 +332,7 @@ class model_trainer:
             with open(sched_path,"w") as f:
                 f.write(json.dumps(self.scheduler.config,indent=4))
         else: # no scheduler is used
-            config = {"scheduler_name":"NA"}
+            config = {"scheduler_name":"NA","hyper_parameters":{}}
             with open(sched_config_path,"w") as f:
                 f.write(json.dumps(config,indent=4))
     
@@ -342,11 +342,21 @@ class model_trainer:
         #save the optimizer and scheduler
         self.save_optimizer(dir_path)
         #save the training information
+        file_path = os.path.join(dir_path,"training_state.json")
         with open(dir_path,"w") as f:
-            f.write(json.dumps(self.training_state_dict(),indent=4))
+            f.write(json.dumps(file_path,indent=4))
     
     def load_training(self,dir_path):
+        # load the training information
+        with open(os.path.join(dir_path,"training_state.json"),"r") as f:
+            training_state = json.loads(f.read())
+        for k,v in training_state.items():
+            setattr(self,k,v)
+        # load the network
+        self.net.load(dir_path)
+        # load the optimizer and the scheduler
+        self.load_optimizer(dir_path)
+    
         
-         
 
     
