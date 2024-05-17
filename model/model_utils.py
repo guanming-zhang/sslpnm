@@ -185,10 +185,14 @@ class model_trainer:
                 self.optimizer.zero_grad()
                 if isinstance(imgs,list): # for augumented data
                     n_views = len(imgs)
-                    imgs = torch.cat(imgs,dim=0)
-                    labels = torch.cat(labels,dim=0)
-                    imgs,labels = imgs.to(self.device),labels.to(self.device)
-                    preds = self.net(imgs)
+                    #imgs = torch.cat(imgs,dim=0)
+                    #labels = torch.cat(labels,dim=0)
+                    #imgs,labels = imgs.to(self.device),labels.to(self.device)
+                    #preds = self.net(imgs)
+                    #loss = self.loss(preds,labels)
+                    imgs = [_imgs.to(self.device) for _imgs in imgs]
+                    labels = [_labels.to(self.device) for _labels in labels]
+                    preds = [self.net(_imgs) for _imgs in imgs]
                     loss = self.loss(preds,labels)
                 else:
                     imgs,labels = imgs.to(self.device),labels.to(self.device)
@@ -196,8 +200,13 @@ class model_trainer:
                     loss = self.loss(preds,labels)
                 loss.backward()
                 self.optimizer.step()
-                n_true += (torch.argmax(preds,dim=1) == labels).sum()
-                n_sample += labels.size()[0]
+                if isinstance(imgs,list):
+                    for i in range(len(imgs)):
+                        n_true += (torch.argmax(preds[i],dim=1) == labels[i]).sum()
+                        n_sample += labels[i].size()[0]
+                else:
+                    n_true += (torch.argmax(preds,dim=1) == labels).sum()
+                    n_sample += labels.size()[0]
                 epoch_loss += loss.item()
             if self.scheduler:
                 self.scheduler.step()
@@ -223,20 +232,19 @@ class model_trainer:
                 self.training_loss.append(epoch_loss)
                 self.validation_accuracy.append(val_acc)
                 self.validation_loss.append(val_loss)
-            
-            count = 0 
             if epoch % self.n_rec_weight == 0:
                 self.net.eval()
+                count = 0 
                 for name,parameter in self.net.named_parameters():
                     if count >= 16:
                         break #only record the first 16 layers
                     if 'weight' in name:
-                        self.writer.add_histogram('weight:' + name,parameter.data.view(-1),self.current_epoch)
-                        self.writer.add_histogram('grad:' + name, parameter.data.grad.view(-1),self.current_epoch)
+                        self.writer.add_histogram('weight:' + name,parameter.view(-1),self.current_epoch)
+                        self.writer.add_histogram('grad:' + name, parameter.grad.view(-1),self.current_epoch)
                     count += 1
         self.test_loss,self.test_accuracy = self.test(self.test_loader)
         self.top5_accuracy = self.n_accuracy(self.test_loader,(5,))
-        return self._mertic2dict()
+        return self.training_state_dict()
     
     def test(self,data_loader):
         '''
@@ -252,8 +260,9 @@ class model_trainer:
             else:
                 imgs,labels = imgs.to(self.device),labels.to(self.device) 
             with torch.no_grad():
-                preds = self.net(imgs).argmax(dim=-1)
-                true_preds += (preds == labels).sum().item()
+                preds = self.net(imgs)
+                arg_preds = preds.argmax(dim=-1)
+                true_preds += (arg_preds == labels).sum().item()
                 count += labels.shape[0]
                 test_loss += self.loss(preds,labels)
                 n_iter += 1 
@@ -277,9 +286,9 @@ class model_trainer:
                 labels = torch.cat(labels,dim=0)
             imgs,labels = imgs.to(self.device),labels.to(self.device)
             with torch.no_grad():
-                preds_k = self.net(imgs).topk(max_k,dim = 1) # size = (batch_size*n_view,top_k)
+                _,preds_k = self.net(imgs).topk(max_k,dim = 1) # size = (batch_size*n_view,top_k)
                 expanded_labels = labels.view(-1,1).expand_as(preds_k) # size = (batch_size*n_view,top_k)
-                for i in len(top_k):
+                for i in range(len(top_k)):
                     k = top_k[i]
                     acc[i] += (preds_k == expanded_labels[:,:k]).float().sum(dim=1).mean()
             n_iter += 1
