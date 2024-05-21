@@ -78,6 +78,11 @@ class WrappedDataset(Dataset):
     _train_set, _val_set = torch.utils.data.random_split(dataset, [0.8, 0.2])
     train_set = WrappedDataset(_train_set,transforms.RandomHorizontalFlip(), n_views=3)
     val_set = WrappedDataset(_val_set,transforms.ToTensor())
+    
+    If using DataLoader object(denoted as loader) to load it, 
+    then for one batch of data, (x,y), 
+    x is a list of n_views elements, x[i] is of size batch_size*C*H*W where x[j] is the augmented version of x[i]
+    y is a list of n_views elements, y[i] is of size batch_size
     train_loader = data.DataLoader(train_dataset,batch_size = batch_size,shuffle=True)
 
     Additional comments: after the data augmentation, one batch 
