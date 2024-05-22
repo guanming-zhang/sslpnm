@@ -68,8 +68,10 @@ def train_model(net,optimizer,loss_fn,train_loader,test_loader,val_loader=None,
             optimizer.zero_grad()
             if isinstance(imgs,list): # for augumented data
                 n_views = len(imgs)
-                imgs = torch.cat(imgs,dim=0)
-                labels = torch.cat(labels,dim=0)
+                #imgs = torch.cat(imgs,dim=0)
+                #labels = torch.cat(labels,dim=0)
+                imgs = torch.stack(imgs,dim=0)
+                labels = torch.stack(labels,dim=0)
                 imgs,labels = imgs.to(device),labels.to(device)
                 preds = net(imgs)
                 loss = loss_fn(preds,labels)
