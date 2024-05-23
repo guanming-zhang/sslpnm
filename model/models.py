@@ -98,6 +98,12 @@ class SimpleCLRNet(BaseNetwork):
     
     def remove_projection_layer(self):
         self.net.fc = torch.nn.Identity()
+    
+    def add_linear_layer(self,out_dim):
+        self.net.fc = torch.nn.Sequential(
+            self.net.fc,
+            torch.nn.LazyLinear(out_dim)
+        )
 
     def foward(self,x):
         return self.net(x)

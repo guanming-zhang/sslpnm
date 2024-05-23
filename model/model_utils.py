@@ -32,6 +32,7 @@ def create_optim_by_name(params,optim_name:str,optim_hyper_params:dict,scheduler
     return optimizer,scheduler
 
 def create_loss_by_name(loss_name:str,loss_hyper_params:dict):
+    pass
     
 
     
@@ -149,6 +150,7 @@ class model_trainer:
         self.top5_arruracy = -1.0
         
         
+        
     def continue_training(self,dir_path,n_epoch=100, n_converge = 10):
         self.load_training(dir_path)
         self.current_epoch += 1
@@ -223,6 +225,8 @@ class model_trainer:
                 elif epoch - best_epoch > n_converge:
                     print("Early stopping at epoch = {} \n".format(self.current_epoch))
                     break
+            else:
+                val_acc,val_loss = 0.0, -1.0
             # record the loss and accuracy
             if epoch % self.n_rec_loss == 0:
                 self.writer.add_scalar("training_accuracy",training_acc,self.current_epoch)

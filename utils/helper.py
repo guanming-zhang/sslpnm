@@ -114,6 +114,14 @@ def get_cifar10_classes():
               "deer","dog","frog","horse","ship","truck"]
     return labels
 
+#####################################
+# For STL10 dataset
+#####################################   
+def get_stl10_classes():
+    labels = ["airplane","bird","car","cat",
+              "deer","dog","horse","monkey","ship","truck"]
+    return labels
+
 def download_dataset(dataset_path,dataset_name):
     if dataset_name == "CIFAR10":
         '''
