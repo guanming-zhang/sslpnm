@@ -30,6 +30,10 @@ def create_optim_by_name(params,optim_name:str,optim_hyper_params:dict,scheduler
     if scheduler:
         setattr(scheduler,"config",scheduler)
     return optimizer,scheduler
+
+def create_loss_by_name(loss_name:str,loss_hyper_params:dict):
+    
+
     
     
 
@@ -68,10 +72,8 @@ def train_model(net,optimizer,loss_fn,train_loader,test_loader,val_loader=None,
             optimizer.zero_grad()
             if isinstance(imgs,list): # for augumented data
                 n_views = len(imgs)
-                #imgs = torch.cat(imgs,dim=0)
-                #labels = torch.cat(labels,dim=0)
-                imgs = torch.stack(imgs,dim=0)
-                labels = torch.stack(labels,dim=0)
+                imgs = torch.cat(imgs,dim=0)
+                labels = torch.cat(labels,dim=0)
                 imgs,labels = imgs.to(device),labels.to(device)
                 preds = net(imgs)
                 loss = loss_fn(preds,labels)
@@ -187,14 +189,10 @@ class model_trainer:
                 self.optimizer.zero_grad()
                 if isinstance(imgs,list): # for augumented data
                     n_views = len(imgs)
-                    #imgs = torch.cat(imgs,dim=0)
-                    #labels = torch.cat(labels,dim=0)
-                    #imgs,labels = imgs.to(self.device),labels.to(self.device)
-                    #preds = self.net(imgs)
-                    #loss = self.loss(preds,labels)
-                    imgs = [_imgs.to(self.device) for _imgs in imgs]
-                    labels = [_labels.to(self.device) for _labels in labels]
-                    preds = [self.net(_imgs) for _imgs in imgs]
+                    imgs = torch.cat(imgs,dim=0)
+                    labels = torch.cat(labels,dim=0)
+                    imgs,labels = imgs.to(self.device),labels.to(self.device)
+                    preds = self.net(imgs)
                     loss = self.loss(preds,labels)
                 else:
                     imgs,labels = imgs.to(self.device),labels.to(self.device)

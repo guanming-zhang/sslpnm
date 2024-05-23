@@ -77,6 +77,47 @@ class Resnet18(BaseNetwork):
     def forward(self,x):
         return self.net(x)
 
+class SimpleCLRNet(BaseNetwork):
+    def __init__(self,embedded_dim:int,resnet_type:str="resnet18"):
+        super().__init__()
+        self.model_name = "SimpleCLRNet"
+        # this is a sloppy way of recording hyperperameters
+        self.hyper_parameters = {"embedded_dim":embedded_dim,"resnet_type":resnet_type}
+        for k,v in self.hyper_parameters.items():
+            setattr(self,k,v)
+        if resnet_type == "resnet18":
+            self.net = torchvision.models.resnet18(num_classes = 4*embedded_dim)
+        elif resnet_type == "resnet34":
+            self.net = torchvision.models.resnet34(num_classes = 4*embedded_dim)
+        
+        self.net.fc = torch.nn.Sequential(
+                        self.net.fc,
+                        torch.nn.ReLU(),
+                        torch.nn.Linear(4*embedded_dim,embedded_dim)
+                    )
+    
+    def remove_projection_layer(self):
+        self.net.fc = torch.nn.Identity()
+
+    def foward(self,x):
+        return self.net(x)
+
+class LinearNet(BaseNetwork):
+    def __init__(self,in_dim,out_dim):
+        super().__init__()
+        self.model_name = "LinearNet"
+        # this is a sloppy way of recording hyperperameters
+        self.hyper_parameters = {"in_dim":in_dim,"out_dim":out_dim}
+        for k,v in self.hyper_parameters.items():
+            setattr(self,k,v)
+        self.net = torch.nn.Linear(in_features=in_dim,out_features=out_dim)
+    
+    def forward(self,x):
+        return self.net(x)
+
+
+
+
 
 
 
