@@ -102,10 +102,10 @@ class SimpleCLRNet(BaseNetwork):
     def add_linear_layer(self,out_dim):
         self.net.fc = torch.nn.Sequential(
             self.net.fc,
-            torch.nn.LazyLinear(out_dim)
+            torch.nn.Linear(in_features=4*self.embedded_dim,out_features= out_dim)
         )
 
-    def foward(self,x):
+    def forward(self,x):
         return self.net(x)
 
 class LinearNet(BaseNetwork):

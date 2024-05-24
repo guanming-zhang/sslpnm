@@ -1,10 +1,9 @@
 import torch
 import torch.nn.functional as F
 class CrossEntropy:
-    def __init__(self,n_views):
+    def __init__(self):
         self.loss_name = "cross_entropy_loss"
         self.loss = torch.nn.CrossEntropyLoss()
-        self.n_veiws = n_views
     def __call__(self,preds,labels):
         loss = self.loss(preds,labels)
         return loss
@@ -17,12 +16,12 @@ class InfoNCELoss:
         self.tau = tau  
         self.hyper_parameters = {"n_views":n_views,"batch_size":batch_size,"tau":tau}
     def __call__(self,preds,labels):
-        sim = F.cosine_similarity(preds[:,None,:],labels[None,:,:],dim=-1)
-        mask_self = torch.eye(preds.shape[0],dtype=torch.bool)
+        sim = F.cosine_similarity(preds[:,None,:],preds[None,:,:],dim=-1)
+        mask_self = torch.eye(preds.shape[0],dtype=torch.bool,device=sim.device)
         sim.masked_fill_(mask_self,0.0)
         positive_mask = mask_self.roll(shifts=self.batch_size,dims=0)
         sim /= self.tau
-        ll = torch.man(-sim[positive_mask] + torch.logsumexp(sim,dim=-1))
+        ll = torch.mean(-sim[positive_mask] + torch.logsumexp(sim,dim=-1))
         return ll
 
 class GaussianPackingLoss:

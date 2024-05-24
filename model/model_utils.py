@@ -125,7 +125,7 @@ def test_model(net,data_loader,device):
 class model_trainer:
     def __init__(self,net = None,optimizer = None,scheduler = None,loss = None,
                 train_loader = None,test_loader = None,val_loader = None,
-                logdir = "./runs",n_rec_loss = 1,n_rec_weight = 20,
+                logdir = "./runs",n_rec_loss = 1,n_rec_weight = 20,is_supervised=True,
                 device = torch.device("cpu")):
         self.net = net 
         self.optimizer = optimizer
@@ -147,7 +147,8 @@ class model_trainer:
         self.validation_loss = []
         self.test_accuracy = -1.0
         self.test_loss = -1.0
-        self.top5_arruracy = -1.0
+        self.top5_accuracy = -1.0
+        self.is_supervised = is_supervised
         
         
         
@@ -214,8 +215,11 @@ class model_trainer:
                 self.scheduler.step()
             epoch_loss /= n_iter
             # save the training accuracy and loss
-            training_acc = (n_true/n_sample).item()
-            print("epoch={},training accuracy is {:.3f}\n".format(self.current_epoch,training_acc))
+            if self.is_supervised:
+                training_acc = (n_true/n_sample).item()
+                print("epoch={},training loss is {:.3f},accuracy is {:.3f}\n".format(self.current_epoch,epoch_loss,training_acc))
+            else:
+                print("epoch={},training loss is {:.3f}\n".format(self.current_epoch,epoch_loss))
             # model validation
             if self.val_loader:
                 val_loss,val_acc = self.test(self.val_loader)
@@ -229,12 +233,14 @@ class model_trainer:
                 val_acc,val_loss = 0.0, -1.0
             # record the loss and accuracy
             if epoch % self.n_rec_loss == 0:
-                self.writer.add_scalar("training_accuracy",training_acc,self.current_epoch)
+                if self.is_supervised:
+                    self.writer.add_scalar("training_accuracy",training_acc,self.current_epoch)
+                    self.writer.add_scalar("validation_acc",val_acc,self.current_epoch) 
+                    self.training_accuracy.append(training_acc) 
+                    self.validation_accuracy.append(val_acc)
+
                 self.writer.add_scalar("training_loss",loss,self.current_epoch)
-                self.writer.add_scalar("validation_acc",val_acc,self.current_epoch) 
-                self.training_accuracy.append(training_acc)     
                 self.training_loss.append(epoch_loss)
-                self.validation_accuracy.append(val_acc)
                 self.validation_loss.append(val_loss)
             if epoch % self.n_rec_weight == 0:
                 self.net.eval()
@@ -246,8 +252,9 @@ class model_trainer:
                         self.writer.add_histogram('weight:' + name,parameter.view(-1),self.current_epoch)
                         self.writer.add_histogram('grad:' + name, parameter.grad.view(-1),self.current_epoch)
                     count += 1
-        self.test_loss,self.test_accuracy = self.test(self.test_loader)
-        self.top5_accuracy = self.n_accuracy(self.test_loader,(5,))
+        if self.test_loader:
+            self.test_loss,self.test_accuracy = self.test(self.test_loader)
+            self.top5_accuracy = self.n_accuracy(self.test_loader,(5,))
         return self.training_state_dict()
     
     def test(self,data_loader):
