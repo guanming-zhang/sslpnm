@@ -36,7 +36,13 @@ class EllipoidsPackingLoss:
         self.n_views = n_views
         self.batch_size = batch_size
     def __call__(self,preds,labels):
-        pass
+        # reshape (V*B)*O shape tensor to shape V*B*O 
+        preds = torch.reshape(preds,(self.n_views,self.batch_size,preds.shape[-1]))
+        centers = torch.mean(preds,dim=0)
+        v = preds - centers
+        corr = torch.matmul(torch.permute(v,(1,2,0)), torch.permute(v,(1,0,2))) # size B*D*D
+
+
     
         
             
